@@ -64,6 +64,29 @@ app.get('/api/layouts/:name', (req, res) => {
   });
 });
 
+app.delete('/api/layouts/:name', (req, res) => {
+  const name = req.params.name;
+
+  const deleteLayoutQuery = `DELETE FROM layouts WHERE name = ?`;
+  const deleteAssignmentsQuery = `DELETE FROM seat_assignments WHERE layout_id IN (SELECT id FROM layouts WHERE name = ?)`;
+
+  db.run(deleteAssignmentsQuery, [name], (assignErr) => {
+    if (assignErr) {
+      console.error('Error deleting seat assignments:', assignErr);
+      return res.status(500).json({ error: 'Failed to delete seat assignments' });
+    }
+
+    db.run(deleteLayoutQuery, [name], (layoutErr) => {
+      if (layoutErr) {
+        console.error('Error deleting layout:', layoutErr);
+        return res.status(500).json({ error: 'Failed to delete layout' });
+      }
+
+      res.json({ success: true, message: `Layout '${name}' deleted successfully.` });
+    });
+  });
+});
+
 app.post('/api/layouts', (req, res) => {
   const { name, elements } = req.body;
 
