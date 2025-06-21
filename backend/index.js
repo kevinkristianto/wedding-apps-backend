@@ -53,10 +53,9 @@ app.get('/api/layouts/:name', (req, res) => {
         assignments.map((a) => [a.seat_id, a.guest_name])
       );
 
-      // Merge guest names into elements
       const mergedElements = elements.map((el) => ({
         ...el,
-        guest: guestMap[el.id] || el.guest || null,
+        guest: guestMap[el.id] === '' ? null : guestMap[el.id] || el.guest || null,
       }));
 
       res.json({ name, elements: mergedElements });
@@ -329,7 +328,7 @@ app.post('/api/layouts/:layoutName/assign-seat', (req, res) => {
   const { layoutName } = req.params;
   const { seatId, guestName } = req.body;
 
-  console.log('Assigning guest:', { layoutName, seatId, guestName }); // Log the request data
+  console.log('Assigning guest:', { layoutName, seatId, guestName });
 
   const layoutQuery = `SELECT id FROM layouts WHERE name = ?`;
   db.get(layoutQuery, [layoutName], (err, row) => {
@@ -340,23 +339,29 @@ app.post('/api/layouts/:layoutName/assign-seat', (req, res) => {
 
     const layoutId = row.id;
 
+    // Save empty string instead of null for "no guest"
+    const actualGuestName =
+      typeof guestName === 'string' && guestName.trim().toLowerCase() !== 'null'
+        ? guestName.trim()
+        : '';
+
     const upsertQuery = `
       INSERT INTO seat_assignments (layout_id, seat_id, guest_name)
       VALUES (?, ?, ?)
       ON CONFLICT(layout_id, seat_id) DO UPDATE SET guest_name = excluded.guest_name
     `;
-    db.run(upsertQuery, [layoutId, seatId, guestName || null], (upsertErr) => {
+
+    db.run(upsertQuery, [layoutId, seatId, actualGuestName], (upsertErr) => {
       if (upsertErr) {
-        console.error('Error saving seat assignment:', upsertErr); // Log the error
-        return res
-          .status(500)
-          .json({ error: 'Failed to save seat assignment' });
+        console.error('Error saving seat assignment:', upsertErr);
+        return res.status(500).json({ error: 'Failed to save seat assignment' });
       }
 
       res.json({ success: true });
     });
   });
 });
+
 
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
