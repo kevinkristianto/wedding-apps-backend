@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model guests {
+  id         String  @id
+  guestToken String  @unique(map: "guests_guesttoken_key")
+  name       String
+  menu       String?
+  allergies  String?
+  steakCook  String?
+}
+
+model layouts {
+  id               Int                @id @default(autoincrement())
+  name             String?
+  data             String?
+  seat_assignments seat_assignments[]
+}
+
+model seat_assignments {
+  id         Int     @id @default(autoincrement())
+  layout_id  Int
+  seat_id    String
+  guest_name String?
+  layouts    layouts @relation(fields: [layout_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([layout_id, seat_id])
+}

@@ -1,130 +1,117 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const db = require('./models/initDb');
+const { PrismaClient } = require('@prisma/client');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+const prisma = new PrismaClient();
 const PORT = 5000;
 
-// --- Layout routes unchanged ---
-app.get('/api/layouts', (req, res) => {
-  const query = `SELECT name FROM layouts`;
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      console.error('DB error fetching layout names:', err);
-      return res.status(500).json({ error: 'Failed to fetch layouts' });
-    }
-    const names = rows.map((row) => row.name);
+// --- Layout routes ---
+app.get('/api/layouts', async (req, res) => {
+  try {
+    const layouts = await prisma.layouts.findMany({
+      select: { name: true },
+    });
+    const names = layouts.map((l) => l.name);
     res.json(names);
-  });
+  } catch (error) {
+    console.error('Error fetching layouts:', error);
+    res.status(500).json({ error: 'Failed to fetch layouts' });
+  }
 });
 
-app.get('/api/layouts/:name', (req, res) => {
-  const name = req.params.name;
-  const layoutQuery = `SELECT id, data FROM layouts WHERE name = ?`;
-
-  db.get(layoutQuery, [name], (err, row) => {
-    if (err || !row) {
-      console.error('Error fetching layout:', err);
+app.get('/api/layouts/:name', async (req, res) => {
+  const { name } = req.params;
+  try {
+    const layout = await prisma.layouts.findFirst({
+      where: { name },
+      select: { id: true, data: true },
+    });
+    if (!layout) {
       return res.status(404).json({ error: 'Layout not found' });
     }
 
-    let elements;
-    try {
-      elements = JSON.parse(row.data);
-    } catch (parseErr) {
-      console.error('Error parsing layout data:', parseErr);
-      return res.status(500).json({ error: 'Invalid layout data' });
-    }
+    const elements = JSON.parse(layout.data);
 
-    const layoutId = row.id;
-
-    const assignmentQuery = `SELECT seat_id, guest_name FROM seat_assignments WHERE layout_id = ?`;
-    db.all(assignmentQuery, [layoutId], (assignErr, assignments) => {
-      if (assignErr) {
-        console.error('Error fetching assignments:', assignErr);
-        return res.status(500).json({ error: 'Failed to fetch assignments' });
-      }
-
-      const guestMap = Object.fromEntries(
-        assignments.map((a) => [a.seat_id, a.guest_name])
-      );
-
-      const mergedElements = elements.map((el) => ({
-        ...el,
-        guest: guestMap[el.id] === '' ? null : guestMap[el.id] || el.guest || null,
-      }));
-
-      res.json({ name, elements: mergedElements });
+    const assignments = await prisma.seat_assignments.findMany({
+      where: { layout_id: layout.id },
+      select: { seat_id: true, guest_name: true },
     });
-  });
+
+    const guestMap = Object.fromEntries(
+      assignments.map((a) => [a.seat_id, a.guest_name])
+    );
+
+    const mergedElements = elements.map((el) => ({
+      ...el,
+      guest:
+        guestMap[el.id] === ''
+          ? null
+          : guestMap[el.id] || el.guest || null,
+    }));
+
+    res.json({ name, elements: mergedElements });
+  } catch (error) {
+    console.error('Error fetching layout:', error);
+    res.status(500).json({ error: 'Failed to fetch layout' });
+  }
 });
 
-app.delete('/api/layouts/:name', (req, res) => {
-  const name = req.params.name;
+app.delete('/api/layouts/:name', async (req, res) => {
+  const { name } = req.params;
 
-  const deleteLayoutQuery = `DELETE FROM layouts WHERE name = ?`;
-  const deleteAssignmentsQuery = `DELETE FROM seat_assignments WHERE layout_id IN (SELECT id FROM layouts WHERE name = ?)`;
+  try {
+    const layout = await prisma.layouts.findFirst({
+      where: { name },
+      select: { id: true },
+    });
 
-  db.run(deleteAssignmentsQuery, [name], (assignErr) => {
-    if (assignErr) {
-      console.error('Error deleting seat assignments:', assignErr);
-      return res.status(500).json({ error: 'Failed to delete seat assignments' });
+    if (!layout) {
+      return res.status(404).json({ error: 'Layout not found' });
     }
 
-    db.run(deleteLayoutQuery, [name], (layoutErr) => {
-      if (layoutErr) {
-        console.error('Error deleting layout:', layoutErr);
-        return res.status(500).json({ error: 'Failed to delete layout' });
-      }
-
-      res.json({ success: true, message: `Layout '${name}' deleted successfully.` });
+    await prisma.seat_assignments.deleteMany({
+      where: { layout_id: layout.id },
     });
-  });
+
+    await prisma.layouts.delete({
+      where: { name },
+    });
+
+    res.json({ success: true, message: `Layout '${name}' deleted successfully.` });
+  } catch (error) {
+    console.error('Error deleting layout:', error);
+    res.status(500).json({ error: 'Failed to delete layout' });
+  }
 });
 
-app.post('/api/layouts', (req, res) => {
+app.post('/api/layouts', async (req, res) => {
   const { name, elements } = req.body;
 
   if (!name || !elements) {
     return res.status(400).json({ error: 'Invalid layout data' });
   }
 
-  const dataStr = JSON.stringify(elements);
-
-  const checkQuery = `SELECT id FROM layouts WHERE name = ?`;
-  db.get(checkQuery, [name], (err, row) => {
-    if (err) {
-      console.error('DB error checking layout existence:', err);
-      return res.status(500).json({ error: 'Failed to save layout' });
-    }
-
-    if (row) {
-      const updateQuery = `UPDATE layouts SET data = ? WHERE id = ?`;
-      db.run(updateQuery, [dataStr, row.id], function (updateErr) {
-        if (updateErr) {
-          console.error('DB error updating layout:', updateErr);
-          return res.status(500).json({ error: 'Failed to update layout' });
-        }
-        res.json({ message: 'Layout updated', name });
-      });
-    } else {
-      const insertQuery = `INSERT INTO layouts (name, data) VALUES (?, ?)`;
-      db.run(insertQuery, [name, dataStr], function (insertErr) {
-        if (insertErr) {
-          console.error('DB error inserting layout:', insertErr);
-          return res.status(500).json({ error: 'Failed to save layout' });
-        }
-        res.json({ message: 'Layout saved', name });
-      });
-    }
-  });
+  try {
+    const dataStr = JSON.stringify(elements);
+    await prisma.layouts.upsert({
+      where: { name },
+      update: { data: dataStr },
+      create: { name, data: dataStr },
+    });
+    res.json({ message: 'Layout saved or updated', name });
+  } catch (error) {
+    console.error('Error saving layout:', error);
+    res.status(500).json({ error: 'Failed to save layout' });
+  }
 });
 
-app.post('/api/guests', (req, res) => {
+// --- Guests routes ---
+app.post('/api/guests', async (req, res) => {
   const { name, menu = '', allergies = [], steakCook = '' } = req.body;
 
   if (!name) {
@@ -134,235 +121,216 @@ app.post('/api/guests', (req, res) => {
   const id = uuidv4();
   const guestToken = uuidv4();
 
-  const checkQuery = `SELECT * FROM guests WHERE LOWER(name) = LOWER(?)`;
-  db.get(checkQuery, [name], (err, row) => {
-    if (err) {
-      console.error('DB error checking guest existence:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-
-    if (row) {
+  try {
+    const existingGuest = await prisma.guests.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+    });
+    if (existingGuest) {
       return res.status(409).json({ error: 'Guest already exists' });
     }
 
-    const insertQuery = `INSERT INTO guests (id, guestToken, name, menu, allergies, steakCook) VALUES (?, ?, ?, ?, ?, ?)`;
-    db.run(
-      insertQuery,
-      [id, guestToken, name, menu, JSON.stringify(allergies), steakCook],
-      function (insertErr) {
-        if (insertErr) {
-          console.error('DB error inserting guest:', insertErr);
-          return res.status(500).json({ error: 'Failed to save guest' });
-        }
-        res
-          .status(201)
-          .json({ id, guestToken, name, menu, allergies, steakCook });
-      }
-    );
-  });
+    const guest = await prisma.guests.create({
+      data: {
+        id,
+        guestToken,
+        name,
+        menu,
+        allergies: JSON.stringify(allergies),
+        steakCook,
+      },
+    });
+
+    res.status(201).json({
+      id: guest.id,
+      guestToken: guest.guestToken,
+      name: guest.name,
+      menu: guest.menu,
+      allergies,
+      steakCook: guest.steakCook,
+    });
+  } catch (error) {
+    console.error('Error saving guest:', error);
+    res.status(500).json({ error: 'Failed to save guest' });
+  }
 });
 
-app.delete('/api/guests/:identifier', (req, res) => {
+app.delete('/api/guests/:identifier', async (req, res) => {
   const identifier = req.params.identifier.toLowerCase();
 
-  // Delete guest by guestToken OR id OR name (case-insensitive)
-  const deleteQueryByToken = `DELETE FROM guests WHERE LOWER(guestToken) = ?`;
-  const deleteQueryById = `DELETE FROM guests WHERE id = ?`;
-  const deleteQueryByName = `DELETE FROM guests WHERE LOWER(name) = ?`;
+  try {
+    // Try delete by guestToken
+    let deleted = await prisma.guests.deleteMany({
+      where: { guestToken: { equals: identifier } },
+    });
 
-  // First try by guestToken
-  db.run(deleteQueryByToken, [identifier], function (err) {
-    if (err) {
-      console.error('DB error deleting guest by token:', err);
-      return res.status(500).json({ error: 'Failed to delete guest' });
-    }
-    if (this.changes > 0) {
+    if (deleted.count > 0) {
       return res.json({ message: 'Guest deleted successfully by token' });
     }
-    // Try by id (only if identifier is numeric)
-    const numericId = parseInt(identifier, 10);
-    if (!isNaN(numericId)) {
-      db.run(deleteQueryById, [numericId], function (err2) {
-        if (err2) {
-          console.error('DB error deleting guest by id:', err2);
-          return res.status(500).json({ error: 'Failed to delete guest' });
-        }
-        if (this.changes > 0) {
-          return res.json({ message: 'Guest deleted successfully by id' });
-        }
-        // Try by name
-        db.run(deleteQueryByName, [identifier], function (err3) {
-          if (err3) {
-            console.error('DB error deleting guest by name:', err3);
-            return res.status(500).json({ error: 'Failed to delete guest' });
-          }
-          if (this.changes > 0) {
-            return res.json({ message: 'Guest deleted successfully by name' });
-          }
-          return res
-            .status(404)
-            .json({ error: 'Guest not found for deletion' });
-        });
-      });
-    } else {
-      // Not numeric id, try name directly
-      db.run(deleteQueryByName, [identifier], function (err3) {
-        if (err3) {
-          console.error('DB error deleting guest by name:', err3);
-          return res.status(500).json({ error: 'Failed to delete guest' });
-        }
-        if (this.changes > 0) {
-          return res.json({ message: 'Guest deleted successfully by name' });
-        }
-        return res.status(404).json({ error: 'Guest not found for deletion' });
-      });
+
+    // Try delete by id
+    deleted = await prisma.guests.deleteMany({
+      where: { id: identifier },
+    });
+
+    if (deleted.count > 0) {
+      return res.json({ message: 'Guest deleted successfully by id' });
     }
-  });
+
+    // Try delete by name (case-insensitive)
+    deleted = await prisma.guests.deleteMany({
+      where: { name: { equals: identifier, mode: 'insensitive' } },
+    });
+
+    if (deleted.count > 0) {
+      return res.json({ message: 'Guest deleted successfully by name' });
+    }
+
+    res.status(404).json({ error: 'Guest not found for deletion' });
+  } catch (error) {
+    console.error('Error deleting guest:', error);
+    res.status(500).json({ error: 'Failed to delete guest' });
+  }
 });
 
-app.get('/api/guests', (req, res) => {
-  const query = `SELECT * FROM guests`;
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      console.error('DB error fetching guests:', err);
-      return res.status(500).json({ error: 'Failed to fetch guests' });
-    }
-
-    const guests = rows.map((row) => ({
-      ...row,
-      allergies: row.allergies ? JSON.parse(row.allergies) : [],
+app.get('/api/guests', async (req, res) => {
+  try {
+    const guests = await prisma.guests.findMany();
+    const result = guests.map((guest) => ({
+      ...guest,
+      allergies: guest.allergies ? JSON.parse(guest.allergies) : [],
     }));
-
-    res.json(guests);
-  });
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching guests:', error);
+    res.status(500).json({ error: 'Failed to fetch guests' });
+  }
 });
 
-app.get('/api/guests/id/:id', (req, res) => {
-  const id = req.params.id; // id is UUID string here
-  const query = `SELECT * FROM guests WHERE id = ?`;
+app.get('/api/guests/id/:id', async (req, res) => {
+  const { id } = req.params;
 
-  db.get(query, [id], (err, row) => {
-    if (err) {
-      console.error('DB error fetching guest by id:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    if (!row) {
-      return res.status(404).json({ error: 'Guest not found' });
-    }
-    try {
-      row.allergies = row.allergies ? JSON.parse(row.allergies) : [];
-    } catch {
-      row.allergies = [];
-    }
-    res.json(row);
-  });
-});
+  try {
+    const guest = await prisma.guests.findUnique({
+      where: { id },
+    });
 
-app.get('/api/guests/token/:guestToken', (req, res) => {
-  const guestToken = req.params.guestToken;
-  const query = `SELECT * FROM guests WHERE guestToken = ?`;
-
-  db.get(query, [guestToken], (err, row) => {
-    if (err) {
-      console.error('DB error fetching guest by token:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    if (!row) {
+    if (!guest) {
       return res.status(404).json({ error: 'Guest not found' });
     }
 
-    let allergies = [];
-    try {
-      allergies = JSON.parse(row.allergies || '[]');
-    } catch {
-      allergies = [];
+    guest.allergies = guest.allergies ? JSON.parse(guest.allergies) : [];
+    res.json(guest);
+  } catch (error) {
+    console.error('Error fetching guest:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.get('/api/guests/token/:guestToken', async (req, res) => {
+  const { guestToken } = req.params;
+
+  try {
+    const guest = await prisma.guests.findUnique({
+      where: { guestToken },
+    });
+
+    if (!guest) {
+      return res.status(404).json({ error: 'Guest not found' });
     }
+
+    const allergies = guest.allergies ? JSON.parse(guest.allergies) : [];
 
     res.json({
-      id: row.id,
-      guestToken: row.guestToken,
-      name: row.name,
-      menu: row.menu,
+      id: guest.id,
+      guestToken: guest.guestToken,
+      name: guest.name,
+      menu: guest.menu,
       allergies,
-      steakCook: row.steakCook,
+      steakCook: guest.steakCook,
     });
-  });
+  } catch (error) {
+    console.error('Error fetching guest:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
-app.put('/api/guests/:guestToken', (req, res) => {
-  const guestToken = req.params.guestToken;
+app.put('/api/guests/:guestToken', async (req, res) => {
+  const { guestToken } = req.params;
   const { menu = '', allergies = [], steakCook = null } = req.body;
 
-  const query = `UPDATE guests SET menu = ?, allergies = ?, steakCook = ? WHERE guestToken = ?`;
-  db.run(
-    query,
-    [menu, JSON.stringify(allergies), steakCook, guestToken],
-    function (err) {
-      if (err) {
-        console.error('DB error updating guest:', err);
-        return res.status(500).json({ error: 'Failed to update guest' });
-      }
+  try {
+    const updated = await prisma.guests.updateMany({
+      where: { guestToken },
+      data: {
+        menu,
+        allergies: JSON.stringify(allergies),
+        steakCook,
+      },
+    });
 
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Guest not found' });
-      }
-
-      db.get(
-        `SELECT * FROM guests WHERE guestToken = ?`,
-        [guestToken],
-        (err2, row) => {
-          if (err2) {
-            console.error('DB error fetching updated guest:', err2);
-            return res.status(500).json({ error: 'Database error' });
-          }
-
-          row.allergies = row.allergies ? JSON.parse(row.allergies) : [];
-          res.json(row);
-        }
-      );
+    if (updated.count === 0) {
+      return res.status(404).json({ error: 'Guest not found' });
     }
-  );
+
+    const guest = await prisma.guests.findUnique({
+      where: { guestToken },
+    });
+
+    guest.allergies = guest.allergies ? JSON.parse(guest.allergies) : [];
+    res.json(guest);
+  } catch (error) {
+    console.error('Error updating guest:', error);
+    res.status(500).json({ error: 'Failed to update guest' });
+  }
 });
 
-app.post('/api/layouts/:layoutName/assign-seat', (req, res) => {
+app.post('/api/layouts/:layoutName/assign-seat', async (req, res) => {
   const { layoutName } = req.params;
   const { seatId, guestName } = req.body;
 
   console.log('Assigning guest:', { layoutName, seatId, guestName });
 
-  const layoutQuery = `SELECT id FROM layouts WHERE name = ?`;
-  db.get(layoutQuery, [layoutName], (err, row) => {
-    if (err || !row) {
-      console.error('Error fetching layout:', err);
+  try {
+    const layout = await prisma.layouts.findFirst({
+      where: { name: layoutName },
+      select: { id: true },
+    });
+
+    if (!layout) {
       return res.status(404).json({ error: 'Layout not found' });
     }
 
-    const layoutId = row.id;
+    const layoutId = layout.id;
 
     // Save empty string instead of null for "no guest"
     const actualGuestName =
-      typeof guestName === 'string' && guestName.trim().toLowerCase() !== 'null'
+      typeof guestName === 'string' &&
+      guestName.trim().toLowerCase() !== 'null'
         ? guestName.trim()
         : '';
 
-    const upsertQuery = `
-      INSERT INTO seat_assignments (layout_id, seat_id, guest_name)
-      VALUES (?, ?, ?)
-      ON CONFLICT(layout_id, seat_id) DO UPDATE SET guest_name = excluded.guest_name
-    `;
-
-    db.run(upsertQuery, [layoutId, seatId, actualGuestName], (upsertErr) => {
-      if (upsertErr) {
-        console.error('Error saving seat assignment:', upsertErr);
-        return res.status(500).json({ error: 'Failed to save seat assignment' });
-      }
-
-      res.json({ success: true });
+    await prisma.seat_assignments.upsert({
+      where: {
+        layout_id_seat_id: {
+          layout_id: layoutId,
+          seat_id: seatId,
+        },
+      },
+      update: { guest_name: actualGuestName },
+      create: {
+        layout_id: layoutId,
+        seat_id: seatId,
+        guest_name: actualGuestName,
+      },
     });
-  });
+
+    res.json({ success: true, seatId, guestName: actualGuestName });
+  } catch (error) {
+    console.error('Error assigning seat:', error);
+    res.status(500).json({ error: 'Failed to assign seat' });
+  }
 });
 
-
 app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+  console.log(`Server listening on port ${PORT}`);
 });
