@@ -4,13 +4,14 @@ const { v4: uuidv4 } = require('uuid');
 const { PrismaClient } = require('@prisma/client');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001'],
+}));
 app.use(express.json());
 
 const prisma = new PrismaClient();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
-// --- Layout routes ---
 app.get('/api/layouts', async (req, res) => {
   try {
     const layouts = await prisma.layouts.findMany({
