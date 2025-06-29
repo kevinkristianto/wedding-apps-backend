@@ -12,6 +12,16 @@ app.use(express.json());
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const result = await prisma.$queryRaw`SELECT 1`;
+    res.json({ message: 'Database connection successful', result });
+  } catch (error) {
+    console.error('Database connection test failed:', error);
+    res.status(500).json({ error: 'Database connection failed', details: error.message });
+  }
+});
+
 app.get('/api/layouts', async (req, res) => {
   try {
     const layouts = await prisma.layouts.findMany({
