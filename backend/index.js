@@ -109,11 +109,23 @@ app.post('/api/layouts', async (req, res) => {
 
   try {
     const dataStr = JSON.stringify(elements);
-    await prisma.layouts.upsert({
+
+    const existingLayout = await prisma.layouts.findFirst({
       where: { name },
-      update: { data: dataStr },
-      create: { name, data: dataStr },
+      select: { id: true },
     });
+
+    if (existingLayout) {
+      await prisma.layouts.update({
+        where: { id: existingLayout.id },
+        data: { data: dataStr },
+      });
+    } else {
+      await prisma.layouts.create({
+        data: { name, data: dataStr },
+      });
+    }
+
     res.json({ message: 'Layout saved or updated', name });
   } catch (error) {
     console.error('Error saving layout:', error);
