@@ -90,7 +90,7 @@ app.delete('/api/layouts/:name', async (req, res) => {
     });
 
     await prisma.layouts.delete({
-      where: { name },
+      where: { id: layout.id }, 
     });
 
     res.json({ success: true, message: `Layout '${name}' deleted successfully.` });
