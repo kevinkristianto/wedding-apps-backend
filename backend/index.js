@@ -282,7 +282,7 @@ app.get('/api/guests/token/:guestToken', async (req, res) => {
 
 app.put('/api/guests/:guestToken', async (req, res) => {
   const { guestToken } = req.params;
-  const { menu = '', appetiser = 'Beef Carpaccio', allergies = [], steakCook = null } = req.body;
+  const { menu = '', appetiser = '', allergies = [], steakCook = null } = req.body;
 
   try {
     const updated = await prisma.guests.updateMany({
