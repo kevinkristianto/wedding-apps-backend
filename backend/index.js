@@ -135,7 +135,7 @@ app.post('/api/layouts', async (req, res) => {
 
 // --- Guests routes ---
 app.post('/api/guests', async (req, res) => {
-  const { name, menu = '', allergies = [], steakCook = '' } = req.body;
+  const { name, menu = '', appetiser = 'Beef Carpaccio', allergies = [], steakCook = '' } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Guest name is required' });
@@ -158,6 +158,7 @@ app.post('/api/guests', async (req, res) => {
         guestToken,
         name,
         menu,
+        appetiser,
         allergies: JSON.stringify(allergies),
         steakCook,
       },
@@ -168,6 +169,7 @@ app.post('/api/guests', async (req, res) => {
       guestToken: guest.guestToken,
       name: guest.name,
       menu: guest.menu,
+      appetiser: guest.appetiser,
       allergies,
       steakCook: guest.steakCook,
     });
@@ -268,6 +270,7 @@ app.get('/api/guests/token/:guestToken', async (req, res) => {
       guestToken: guest.guestToken,
       name: guest.name,
       menu: guest.menu,
+      appetiser: guest.appetiser,
       allergies,
       steakCook: guest.steakCook,
     });
@@ -279,13 +282,14 @@ app.get('/api/guests/token/:guestToken', async (req, res) => {
 
 app.put('/api/guests/:guestToken', async (req, res) => {
   const { guestToken } = req.params;
-  const { menu = '', allergies = [], steakCook = null } = req.body;
+  const { menu = '', appetiser = 'Beef Carpaccio', allergies = [], steakCook = null } = req.body;
 
   try {
     const updated = await prisma.guests.updateMany({
       where: { guestToken },
       data: {
         menu,
+        appetiser,
         allergies: JSON.stringify(allergies),
         steakCook,
       },
