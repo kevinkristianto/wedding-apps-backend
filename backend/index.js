@@ -282,12 +282,26 @@ app.get('/api/guests/token/:guestToken', async (req, res) => {
 
 app.put('/api/guests/:guestToken', async (req, res) => {
   const { guestToken } = req.params;
-  const { menu = '', appetiser = '', allergies = [], steakCook = null } = req.body;
+  const { 
+    name,
+    menu = '', 
+    appetiser = '', 
+    allergies = [], 
+    steakCook = null 
+  } = req.body;
 
   try {
+    // Find existing guest to get old name for seat_assignments update
+    const existingGuest = await prisma.guests.findUnique({ where: { guestToken } });
+    if (!existingGuest) return res.status(404).json({ error: 'Guest not found' });
+
+    const oldName = existingGuest.name;
+
+    // Update guests table
     const updated = await prisma.guests.updateMany({
       where: { guestToken },
       data: {
+        ...(name ? { name } : {}),
         menu,
         appetiser,
         allergies: JSON.stringify(allergies),
@@ -297,6 +311,14 @@ app.put('/api/guests/:guestToken', async (req, res) => {
 
     if (updated.count === 0) {
       return res.status(404).json({ error: 'Guest not found' });
+    }
+
+    // Update seat_assignments guest_name if name changed
+    if (name && name !== oldName) {
+      await prisma.seat_assignments.updateMany({
+        where: { guest_name: oldName },
+        data: { guest_name: name },
+      });
     }
 
     const guest = await prisma.guests.findUnique({
