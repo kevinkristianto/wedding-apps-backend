@@ -135,8 +135,8 @@ app.post('/api/layouts', async (req, res) => {
 
 // --- Guests routes ---
 app.post('/api/guests', async (req, res) => {
-  const { name, menu = '', appetiser = 'Beef Carpaccio', allergies = [], steakCook = '' } = req.body;
-
+  const { name, menu = '', appetiser = 'Beef Carpaccio', wineSelection = '', allergies = [], steakCook = '' } = req.body;
+  
   if (!name) {
     return res.status(400).json({ error: 'Guest name is required' });
   }
@@ -159,6 +159,7 @@ app.post('/api/guests', async (req, res) => {
         name,
         menu,
         appetiser,
+        wineSelection,
         allergies: JSON.stringify(allergies),
         steakCook,
       },
@@ -170,6 +171,7 @@ app.post('/api/guests', async (req, res) => {
       name: guest.name,
       menu: guest.menu,
       appetiser: guest.appetiser,
+      wineSelection: guest.wineSelection,
       allergies,
       steakCook: guest.steakCook,
     });
@@ -271,6 +273,7 @@ app.get('/api/guests/token/:guestToken', async (req, res) => {
       name: guest.name,
       menu: guest.menu,
       appetiser: guest.appetiser,
+      wineSelection: guest.wineSelection,
       allergies,
       steakCook: guest.steakCook,
     });
@@ -282,13 +285,7 @@ app.get('/api/guests/token/:guestToken', async (req, res) => {
 
 app.put('/api/guests/:guestToken', async (req, res) => {
   const { guestToken } = req.params;
-  const { 
-    name,
-    menu = '', 
-    appetiser = '', 
-    allergies = [], 
-    steakCook = null 
-  } = req.body;
+  const { name, menu = '', appetiser = '', wineSelection = '', allergies = [], steakCook = null } = req.body;
 
   try {
     // Find existing guest to get old name for seat_assignments update
@@ -304,9 +301,10 @@ app.put('/api/guests/:guestToken', async (req, res) => {
         ...(name ? { name } : {}),
         menu,
         appetiser,
+        wineSelection,
         allergies: JSON.stringify(allergies),
         steakCook,
-      },
+      }
     });
 
     if (updated.count === 0) {
