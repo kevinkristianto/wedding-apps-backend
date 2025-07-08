@@ -1,28 +1,37 @@
-const express = require('express');
-const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
-const { PrismaClient } = require('@prisma/client');
+const express = require("express");
+const cors = require("cors");
+const { v4: uuidv4 } = require("uuid");
+const { PrismaClient } = require("@prisma/client");
 
 const app = express();
-app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'https://event-table-management-app.vercel.app', 'https://kevin-and-leticia.vercel.app'],
-}));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://event-table-management-app.vercel.app",
+      "https://kevin-and-leticia.vercel.app",
+    ],
+  }),
+);
 app.use(express.json());
 
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 
-app.get('/api/test-db', async (req, res) => {
+app.get("/api/test-db", async (req, res) => {
   try {
     const result = await prisma.$queryRaw`SELECT 1`;
-    res.json({ message: 'Database connection successful', result });
+    res.json({ message: "Database connection successful", result });
   } catch (error) {
-    console.error('Database connection test failed:', error);
-    res.status(500).json({ error: 'Database connection failed', details: error.message });
+    console.error("Database connection test failed:", error);
+    res
+      .status(500)
+      .json({ error: "Database connection failed", details: error.message });
   }
 });
 
-app.get('/api/layouts', async (req, res) => {
+app.get("/api/layouts", async (req, res) => {
   try {
     const layouts = await prisma.layouts.findMany({
       select: { name: true },
@@ -30,12 +39,12 @@ app.get('/api/layouts', async (req, res) => {
     const names = layouts.map((l) => l.name);
     res.json(names);
   } catch (error) {
-    console.error('Error fetching layouts:', error);
-    res.status(500).json({ error: 'Failed to fetch layouts' });
+    console.error("Error fetching layouts:", error);
+    res.status(500).json({ error: "Failed to fetch layouts" });
   }
 });
 
-app.get('/api/layouts/:name', async (req, res) => {
+app.get("/api/layouts/:name", async (req, res) => {
   const { name } = req.params;
   try {
     const layout = await prisma.layouts.findFirst({
@@ -43,7 +52,7 @@ app.get('/api/layouts/:name', async (req, res) => {
       select: { id: true, data: true },
     });
     if (!layout) {
-      return res.status(404).json({ error: 'Layout not found' });
+      return res.status(404).json({ error: "Layout not found" });
     }
 
     const elements = JSON.parse(layout.data);
@@ -54,25 +63,23 @@ app.get('/api/layouts/:name', async (req, res) => {
     });
 
     const guestMap = Object.fromEntries(
-      assignments.map((a) => [a.seat_id, a.guest_name])
+      assignments.map((a) => [a.seat_id, a.guest_name]),
     );
 
     const mergedElements = elements.map((el) => ({
       ...el,
       guest:
-        guestMap[el.id] === ''
-          ? null
-          : guestMap[el.id] || el.guest || null,
+        guestMap[el.id] === "" ? null : guestMap[el.id] || el.guest || null,
     }));
 
     res.json({ name, elements: mergedElements });
   } catch (error) {
-    console.error('Error fetching layout:', error);
-    res.status(500).json({ error: 'Failed to fetch layout' });
+    console.error("Error fetching layout:", error);
+    res.status(500).json({ error: "Failed to fetch layout" });
   }
 });
 
-app.delete('/api/layouts/:name', async (req, res) => {
+app.delete("/api/layouts/:name", async (req, res) => {
   const { name } = req.params;
 
   try {
@@ -82,7 +89,7 @@ app.delete('/api/layouts/:name', async (req, res) => {
     });
 
     if (!layout) {
-      return res.status(404).json({ error: 'Layout not found' });
+      return res.status(404).json({ error: "Layout not found" });
     }
 
     await prisma.seat_assignments.deleteMany({
@@ -90,21 +97,24 @@ app.delete('/api/layouts/:name', async (req, res) => {
     });
 
     await prisma.layouts.delete({
-      where: { id: layout.id }, 
+      where: { id: layout.id },
     });
 
-    res.json({ success: true, message: `Layout '${name}' deleted successfully.` });
+    res.json({
+      success: true,
+      message: `Layout '${name}' deleted successfully.`,
+    });
   } catch (error) {
-    console.error('Error deleting layout:', error);
-    res.status(500).json({ error: 'Failed to delete layout' });
+    console.error("Error deleting layout:", error);
+    res.status(500).json({ error: "Failed to delete layout" });
   }
 });
 
-app.post('/api/layouts', async (req, res) => {
+app.post("/api/layouts", async (req, res) => {
   const { name, elements } = req.body;
 
   if (!name || !elements) {
-    return res.status(400).json({ error: 'Invalid layout data' });
+    return res.status(400).json({ error: "Invalid layout data" });
   }
 
   try {
@@ -126,19 +136,26 @@ app.post('/api/layouts', async (req, res) => {
       });
     }
 
-    res.json({ message: 'Layout saved or updated', name });
+    res.json({ message: "Layout saved or updated", name });
   } catch (error) {
-    console.error('Error saving layout:', error);
-    res.status(500).json({ error: 'Failed to save layout' });
+    console.error("Error saving layout:", error);
+    res.status(500).json({ error: "Failed to save layout" });
   }
 });
 
 // --- Guests routes ---
-app.post('/api/guests', async (req, res) => {
-  const { name, menu = '', appetiser = 'Beef Carpaccio', wineSelection = '', allergies = [], steakCook = '' } = req.body;
-  
+app.post("/api/guests", async (req, res) => {
+  const {
+    name,
+    menu = "",
+    appetiser = "Beef Carpaccio",
+    wineSelection = "",
+    allergies = [],
+    steakCook = "",
+  } = req.body;
+
   if (!name) {
-    return res.status(400).json({ error: 'Guest name is required' });
+    return res.status(400).json({ error: "Guest name is required" });
   }
 
   const id = uuidv4();
@@ -146,10 +163,10 @@ app.post('/api/guests', async (req, res) => {
 
   try {
     const existingGuest = await prisma.guests.findFirst({
-      where: { name: { equals: name, mode: 'insensitive' } },
+      where: { name: { equals: name, mode: "insensitive" } },
     });
     if (existingGuest) {
-      return res.status(409).json({ error: 'Guest already exists' });
+      return res.status(409).json({ error: "Guest already exists" });
     }
 
     const guest = await prisma.guests.create({
@@ -176,12 +193,12 @@ app.post('/api/guests', async (req, res) => {
       steakCook: guest.steakCook,
     });
   } catch (error) {
-    console.error('Error saving guest:', error);
-    res.status(500).json({ error: 'Failed to save guest' });
+    console.error("Error saving guest:", error);
+    res.status(500).json({ error: "Failed to save guest" });
   }
 });
 
-app.delete('/api/guests/:identifier', async (req, res) => {
+app.delete("/api/guests/:identifier", async (req, res) => {
   const identifier = req.params.identifier.toLowerCase();
 
   try {
@@ -191,7 +208,7 @@ app.delete('/api/guests/:identifier', async (req, res) => {
     });
 
     if (deleted.count > 0) {
-      return res.json({ message: 'Guest deleted successfully by token' });
+      return res.json({ message: "Guest deleted successfully by token" });
     }
 
     // Try delete by id
@@ -200,26 +217,26 @@ app.delete('/api/guests/:identifier', async (req, res) => {
     });
 
     if (deleted.count > 0) {
-      return res.json({ message: 'Guest deleted successfully by id' });
+      return res.json({ message: "Guest deleted successfully by id" });
     }
 
     // Try delete by name (case-insensitive)
     deleted = await prisma.guests.deleteMany({
-      where: { name: { equals: identifier, mode: 'insensitive' } },
+      where: { name: { equals: identifier, mode: "insensitive" } },
     });
 
     if (deleted.count > 0) {
-      return res.json({ message: 'Guest deleted successfully by name' });
+      return res.json({ message: "Guest deleted successfully by name" });
     }
 
-    res.status(404).json({ error: 'Guest not found for deletion' });
+    res.status(404).json({ error: "Guest not found for deletion" });
   } catch (error) {
-    console.error('Error deleting guest:', error);
-    res.status(500).json({ error: 'Failed to delete guest' });
+    console.error("Error deleting guest:", error);
+    res.status(500).json({ error: "Failed to delete guest" });
   }
 });
 
-app.get('/api/guests', async (req, res) => {
+app.get("/api/guests", async (req, res) => {
   try {
     const guests = await prisma.guests.findMany();
     const result = guests.map((guest) => ({
@@ -228,12 +245,12 @@ app.get('/api/guests', async (req, res) => {
     }));
     res.json(result);
   } catch (error) {
-    console.error('Error fetching guests:', error);
-    res.status(500).json({ error: 'Failed to fetch guests' });
+    console.error("Error fetching guests:", error);
+    res.status(500).json({ error: "Failed to fetch guests" });
   }
 });
 
-app.get('/api/guests/id/:id', async (req, res) => {
+app.get("/api/guests/id/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -242,18 +259,18 @@ app.get('/api/guests/id/:id', async (req, res) => {
     });
 
     if (!guest) {
-      return res.status(404).json({ error: 'Guest not found' });
+      return res.status(404).json({ error: "Guest not found" });
     }
 
     guest.allergies = guest.allergies ? JSON.parse(guest.allergies) : [];
     res.json(guest);
   } catch (error) {
-    console.error('Error fetching guest:', error);
-    res.status(500).json({ error: 'Database error' });
+    console.error("Error fetching guest:", error);
+    res.status(500).json({ error: "Database error" });
   }
 });
 
-app.get('/api/guests/token/:guestToken', async (req, res) => {
+app.get("/api/guests/token/:guestToken", async (req, res) => {
   const { guestToken } = req.params;
 
   try {
@@ -262,7 +279,7 @@ app.get('/api/guests/token/:guestToken', async (req, res) => {
     });
 
     if (!guest) {
-      return res.status(404).json({ error: 'Guest not found' });
+      return res.status(404).json({ error: "Guest not found" });
     }
 
     const allergies = guest.allergies ? JSON.parse(guest.allergies) : [];
@@ -278,19 +295,29 @@ app.get('/api/guests/token/:guestToken', async (req, res) => {
       steakCook: guest.steakCook,
     });
   } catch (error) {
-    console.error('Error fetching guest:', error);
-    res.status(500).json({ error: 'Database error' });
+    console.error("Error fetching guest:", error);
+    res.status(500).json({ error: "Database error" });
   }
 });
 
-app.put('/api/guests/:guestToken', async (req, res) => {
+app.put("/api/guests/:guestToken", async (req, res) => {
   const { guestToken } = req.params;
-  const { name, menu = '', appetiser = '', wineSelection = '', allergies = [], steakCook = null } = req.body;
+  const {
+    name,
+    menu = "",
+    appetiser = "",
+    wineSelection = "",
+    allergies = [],
+    steakCook = null,
+  } = req.body;
 
   try {
     // Find existing guest to get old name for seat_assignments update
-    const existingGuest = await prisma.guests.findUnique({ where: { guestToken } });
-    if (!existingGuest) return res.status(404).json({ error: 'Guest not found' });
+    const existingGuest = await prisma.guests.findUnique({
+      where: { guestToken },
+    });
+    if (!existingGuest)
+      return res.status(404).json({ error: "Guest not found" });
 
     const oldName = existingGuest.name;
 
@@ -304,11 +331,11 @@ app.put('/api/guests/:guestToken', async (req, res) => {
         wineSelection,
         allergies: JSON.stringify(allergies),
         steakCook,
-      }
+      },
     });
 
     if (updated.count === 0) {
-      return res.status(404).json({ error: 'Guest not found' });
+      return res.status(404).json({ error: "Guest not found" });
     }
 
     // Update seat_assignments guest_name if name changed
@@ -326,16 +353,16 @@ app.put('/api/guests/:guestToken', async (req, res) => {
     guest.allergies = guest.allergies ? JSON.parse(guest.allergies) : [];
     res.json(guest);
   } catch (error) {
-    console.error('Error updating guest:', error);
-    res.status(500).json({ error: 'Failed to update guest' });
+    console.error("Error updating guest:", error);
+    res.status(500).json({ error: "Failed to update guest" });
   }
 });
 
-app.post('/api/layouts/:layoutName/assign-seat', async (req, res) => {
+app.post("/api/layouts/:layoutName/assign-seat", async (req, res) => {
   const { layoutName } = req.params;
   const { seatId, guestName } = req.body;
 
-  console.log('Assigning guest:', { layoutName, seatId, guestName });
+  console.log("Assigning guest:", { layoutName, seatId, guestName });
 
   try {
     const layout = await prisma.layouts.findFirst({
@@ -344,17 +371,16 @@ app.post('/api/layouts/:layoutName/assign-seat', async (req, res) => {
     });
 
     if (!layout) {
-      return res.status(404).json({ error: 'Layout not found' });
+      return res.status(404).json({ error: "Layout not found" });
     }
 
     const layoutId = layout.id;
 
     // Save empty string instead of null for "no guest"
     const actualGuestName =
-      typeof guestName === 'string' &&
-      guestName.trim().toLowerCase() !== 'null'
+      typeof guestName === "string" && guestName.trim().toLowerCase() !== "null"
         ? guestName.trim()
-        : '';
+        : "";
 
     await prisma.seat_assignments.upsert({
       where: {
@@ -373,8 +399,8 @@ app.post('/api/layouts/:layoutName/assign-seat', async (req, res) => {
 
     res.json({ success: true, seatId, guestName: actualGuestName });
   } catch (error) {
-    console.error('Error assigning seat:', error);
-    res.status(500).json({ error: 'Failed to assign seat' });
+    console.error("Error assigning seat:", error);
+    res.status(500).json({ error: "Failed to assign seat" });
   }
 });
 

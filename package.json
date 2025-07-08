@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node backend/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "format": "prettier --write ."
   },
   "keywords": [],
   "author": "",
@@ -18,5 +19,8 @@
     "prisma": "^6.10.1",
     "sqlite3": "^5.1.7",
     "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
   }
 }

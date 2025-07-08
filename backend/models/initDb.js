@@ -1,5 +1,5 @@
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('./db/database.sqlite');
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("./db/database.sqlite");
 
 db.serialize(() => {
   db.run(
@@ -9,9 +9,9 @@ db.serialize(() => {
     data TEXT
   )`,
     (err) => {
-      if (err) console.error('Error creating layouts table:', err);
-      else console.log('Layouts table created successfully.');
-    }
+      if (err) console.error("Error creating layouts table:", err);
+      else console.log("Layouts table created successfully.");
+    },
   );
 
   db.run(
@@ -24,9 +24,9 @@ db.serialize(() => {
     steakCook TEXT
   )`,
     (err) => {
-      if (err) console.error('Error creating guests table:', err);
-      else console.log('Guests table created successfully.');
-    }
+      if (err) console.error("Error creating guests table:", err);
+      else console.log("Guests table created successfully.");
+    },
   );
 
   db.run(
@@ -39,9 +39,9 @@ db.serialize(() => {
     UNIQUE (layout_id, seat_id) -- Add UNIQUE constraint
   )`,
     (err) => {
-      if (err) console.error('Error creating seat_assignments table:', err);
-      else console.log('Seat assignments table created successfully.');
-    }
+      if (err) console.error("Error creating seat_assignments table:", err);
+      else console.log("Seat assignments table created successfully.");
+    },
   );
 });
 
