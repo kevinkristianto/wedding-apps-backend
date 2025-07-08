@@ -15,6 +15,7 @@ model guests {
   allergies  String?
   steakCook  String?
   appetiser  String?
+  wineSelection String?
 }
 
 model layouts {
