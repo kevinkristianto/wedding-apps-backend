@@ -3,6 +3,8 @@ const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
 const { PrismaClient } = require("@prisma/client");
 
+require("dotenv").config();
+
 const app = express();
 app.use(
   cors({
@@ -401,6 +403,26 @@ app.post("/api/layouts/:layoutName/assign-seat", async (req, res) => {
   } catch (error) {
     console.error("Error assigning seat:", error);
     res.status(500).json({ error: "Failed to assign seat" });
+  }
+});
+
+app.post("/api/admin/login", (req, res) => {
+  const { password } = req.body;
+
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminPassword) {
+    return res
+      .status(500)
+      .json({ error: "Server misconfigured: no admin password set" });
+  }
+
+  if (password === adminPassword) {
+    return res.json({ success: true, message: "Login successful" });
+  } else {
+    return res
+      .status(401)
+      .json({ success: false, message: "Invalid password" });
   }
 });
 
